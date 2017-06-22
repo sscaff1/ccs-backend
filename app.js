@@ -5,19 +5,42 @@ const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const path = require('path');
+const mongoose = require('mongoose');
+const MongoStore = require('connect-mongo')(session);
 const routes = require('./routes');
+require('./models/User');
 require('./handler');
+require('dotenv').config({ path: 'variables.env' });
 
-passport.use(new Strategy(
-  {
-    clientID: process.env.CLIENT_ID,
-    clientSecret: process.env.CLIENT_SECRET,
-    callbackURL: 'http://localhost:3000/login/facebook/return'
-  },
-  function(accessToken, refreshToken, profile, cb) {
-    return cb(null, profile);
-  }
-));
+const User = mongoose.model('User');
+
+passport.use(
+  new Strategy(
+    {
+      clientID: process.env.CLIENT_ID,
+      clientSecret: process.env.CLIENT_SECRET,
+      callbackURL: 'http://localhost:3000/auth/facebook/return',
+      profile: ['id', 'name', 'emails', 'photos'],
+    },
+    (accessToken, refreshToken, profile, cb) => {
+      User.findOne({ facebookId: profile.id })
+        .then(user => {
+          if (user) {
+            cb(null, user);
+          } else {
+            const newUser = new User();
+            newUser.facebookId = profile.id;
+            newUser.name = profile.displayName;
+            newUser
+              .save()
+              .then(newUserAfterAdd => cb(null, newUserAfterAdd))
+              .catch(err => console.log(err));
+          }
+        })
+        .catch(err => console.log(err));
+    }
+  )
+);
 
 const app = express();
 
